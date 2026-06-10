@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --dc-deep: 210 78% 14%;
+    --dc-green: 168 100% 37%;
+    --dc-ice: 186 44% 96%;
+    --dc-slate: 213 28% 21%;
+    --dc-muted: 213 15% 42%;
+    --dc-border: 200 22% 82%;
+
+    --background: 186 44% 96%;
+    --foreground: 213 28% 21%;
+    --card: 0 0% 100%;
+    --card-foreground: 213 28% 21%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 213 28% 21%;
+    --primary: 210 78% 14%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 186 44% 96%;
+    --secondary-foreground: 213 28% 21%;
+    --muted: 186 30% 94%;
+    --muted-foreground: 213 15% 42%;
+    --accent: 168 100% 37%;
+    --accent-foreground: 210 78% 14%;
+    --destructive: 0 74% 42%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 200 22% 82%;
+    --input: 200 22% 82%;
+    --ring: 168 100% 37%;
+    --radius: 0.625rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .dc-grid-bg {
+    background-image:
+      linear-gradient(hsl(var(--dc-border) / 0.18) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--dc-border) / 0.18) 1px, transparent 1px);
+    background-size: 56px 56px;
+  }
+
+  .dc-hero-glow {
+    background:
+      radial-gradient(ellipse 80% 60% at 50% -10%, hsl(var(--dc-green) / 0.14), transparent 55%),
+      radial-gradient(ellipse 50% 40% at 100% 0%, hsl(var(--dc-deep) / 0.08), transparent 50%),
+      hsl(var(--dc-ice));
+  }
+
+  .dc-card {
+    @apply rounded-2xl bg-white shadow-[0_2px_16px_rgba(8,31,63,0.06)];
+  }
+
+  .dc-card-hover {
+    @apply transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_28px_rgba(8,31,63,0.1)];
+  }
+
+  .dc-panel {
+    @apply rounded-2xl bg-white/80 backdrop-blur-sm shadow-[0_2px_16px_rgba(8,31,63,0.05)];
+  }
+
+  .dc-label {
+    @apply text-[11px] font-bold uppercase tracking-[0.14em] text-[hsl(var(--dc-green))];
+  }
+
+  .dc-heading {
+    @apply font-bold tracking-tight text-[hsl(var(--dc-deep))];
+  }
+}
