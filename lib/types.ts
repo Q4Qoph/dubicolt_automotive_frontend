@@ -24,4 +24,6 @@ export type {
   Product,
   RelatedProduct,
   InventoryCatalogItem,
+  HomeFeed,
+  VehicleFilterOptions,
 } from './domain-types';

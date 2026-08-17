@@ -202,7 +202,7 @@ function MarketplaceCatalog() {
             className={selectClass}
           >
             <option value="">Make</option>
-            {vehicleFilter.makes.map((item) => (
+            {vehicleFilter.makes.map((item: string) => (
               <option key={item} value={item}>{item}</option>
             ))}
           </select>
@@ -221,7 +221,7 @@ function MarketplaceCatalog() {
             className={cn(selectClass, !make && 'opacity-50')}
           >
             <option value="">Model</option>
-            {models.map((item) => (
+            {models.map((item: string) => (
               <option key={item} value={item}>{item}</option>
             ))}
           </select>
@@ -239,7 +239,7 @@ function MarketplaceCatalog() {
             className={cn(selectClass, !model && 'opacity-50')}
           >
             <option value="">Year</option>
-            {vehicleFilter.years.map((item) => (
+            {vehicleFilter.years.map((item: number) => (
               <option key={item} value={String(item)}>{item}</option>
             ))}
           </select>
