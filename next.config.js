@@ -1,4 +1,5 @@
-const apiTarget = process.env.API_PROXY_TARGET ?? 'http://localhost:3001';
+const rawTarget = process.env.API_PROXY_TARGET || process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
+const apiTarget = rawTarget.replace(/\/api\/?$/, '');
 
 const nextConfig = {
   eslint: {
