@@ -13,7 +13,7 @@ function resolveApiBaseUrl(): string {
   // Server-side: use base URL environment variables, fallback to localhost
   const env = process.env.NEXT_PUBLIC_API_BASE_URL?.trim().replace(/\/$/, '');
   const proxy = process.env.API_PROXY_TARGET?.trim().replace(/\/$/, '');
-  return proxy ? `${proxy}/api` : (env || 'http://localhost:3001/api');
+  return proxy ? `${proxy}/api` : (env || 'https://dubicolt-v2.ambitiousrock-1ff861ef.eastus.azurecontainerapps.io/api');
 }
 
 export const API_BASE_URL = resolveApiBaseUrl();

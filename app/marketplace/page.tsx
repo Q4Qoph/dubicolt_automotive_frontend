@@ -17,7 +17,7 @@ import { marketplaceProductHref } from '@/lib/marketplace-navigation';
 import { BRAND } from '@/lib/dubicolt/brand';
 import { cn } from '@/lib/utils';
 
-const PAGE_SIZE = 12;
+const PAGE_SIZE = 48;
 
 type SortOption = 'relevant' | 'price-asc' | 'price-desc' | 'name';
 
@@ -52,15 +52,23 @@ function MarketplaceCatalog() {
     setYear(urlYear);
   }, [urlMake, urlModel, urlYear]);
 
-  const { data: products = [], isLoading } = useMarketplaceProducts(
-    undefined,
+  const { data: marketplaceResult, isLoading } = useMarketplaceProducts(
+    selectedCategories[0] || undefined,
     searchQuery || undefined,
-    undefined,
+    selectedBrands[0] || undefined,
     urlMake || urlModel || urlYear
       ? { make: urlMake || undefined, model: urlModel || undefined, year: urlYear || undefined }
       : undefined,
+    page,
+    PAGE_SIZE,
+    sortBy,
   );
   const { addToCart, GuestCartPrompt } = usePromptedCart();
+
+  const products = marketplaceResult?.data ?? [];
+  const totalCount = marketplaceResult?.meta?.total ?? 0;
+  const totalPages = marketplaceResult?.meta?.totalPages ?? Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
 
   const brandOptions = useMemo(() => {
     const brands = new Set<string>();
@@ -116,50 +124,12 @@ function MarketplaceCatalog() {
     if (next <= 1) params.delete('page');
     else params.set('page', String(next));
     router.replace(`/marketplace?${params}`);
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   }
 
-  const filteredProducts = useMemo(() => {
-    let list = [...products];
-
-    if (selectedCategories.length > 0) {
-      list = list.filter((p) => selectedCategories.includes(p.category));
-    }
-    if (selectedBrands.length > 0) {
-      list = list.filter((p) => selectedBrands.includes(p.vendor));
-    }
-    if (priceMax != null) {
-      list = list.filter((p) => parseKsh(p.price_kes) <= priceMax);
-    }
-
-    switch (sortBy) {
-      case 'price-asc':
-        list.sort((a, b) => parseKsh(a.price_kes) - parseKsh(b.price_kes));
-        break;
-      case 'price-desc':
-        list.sort((a, b) => parseKsh(b.price_kes) - parseKsh(a.price_kes));
-        break;
-      case 'name':
-        list.sort((a, b) => a.name.localeCompare(b.name));
-        break;
-      default:
-        list.sort((a, b) => {
-          const ma = computeFitmentMatch(a, { make: urlMake, model: urlModel, year: urlYear }) ?? 0;
-          const mb = computeFitmentMatch(b, { make: urlMake, model: urlModel, year: urlYear }) ?? 0;
-          return mb - ma;
-        });
-        break;
-    }
-
-    return list;
-  }, [products, selectedCategories, selectedBrands, priceMax, sortBy, urlMake, urlModel, urlYear]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const paginatedProducts = filteredProducts.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE,
-  );
-
+  const paginatedProducts = products;
   const vehicle = { make: urlMake, model: urlModel, year: urlYear };
 
   const resultsTitle = searchQuery
@@ -168,8 +138,8 @@ function MarketplaceCatalog() {
       ? `Results for ${[urlMake, urlModel, urlYear].filter(Boolean).join(' ')}`
       : 'Browse spare parts';
 
-  const showingFrom = filteredProducts.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
-  const showingTo = Math.min(currentPage * PAGE_SIZE, filteredProducts.length);
+  const showingFrom = totalCount === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+  const showingTo = Math.min(currentPage * PAGE_SIZE, totalCount);
 
   const selectClass =
     'w-full appearance-none rounded-lg border border-[#E5E7EB] bg-white px-3 py-2.5 pr-9 text-sm text-[#243247] focus:border-[#00BC94] focus:outline-none focus:ring-2 focus:ring-[#00BC94]/15';
@@ -371,9 +341,9 @@ function MarketplaceCatalog() {
               <p className="mt-1 text-sm text-[#5A6B7D]">
                 {isLoading
                   ? 'Loading catalog…'
-                  : filteredProducts.length === 0
+                  : totalCount === 0
                     ? 'No matches found'
-                    : `Showing ${showingFrom}-${showingTo} of ${filteredProducts.length} high-precision matches found`}
+                    : `Showing ${showingFrom.toLocaleString()}-${showingTo.toLocaleString()} of ${totalCount.toLocaleString()} high-precision matches found`}
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">

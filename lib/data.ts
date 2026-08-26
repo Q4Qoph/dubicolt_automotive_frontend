@@ -62,7 +62,15 @@ export async function getProductById(id: string): Promise<Product | null> {
 
 export async function getRelatedProducts(excludeId: string, limit = 4): Promise<RelatedProduct[]> {
   const rows = await api.apiGetRelatedProducts(excludeId, limit);
-  return rows.map(mapRelatedProduct);
+  return rows.map((p) => ({
+    id: p.id,
+    name: p.name,
+    price: Number(p.price_kes) || 0,
+    price_kes: p.price_kes,
+    origin: p.origin || p.category,
+    image_url: p.image_url,
+    stock: p.stock,
+  }));
 }
 
 export async function getSourcingRequests(
@@ -171,14 +179,14 @@ export async function getHomeFeed(): Promise<HomeFeed> {
         origin: c.origin,
         product_count: c.product_count,
         image_url: c.image_url,
-        sample_products: (c.sample_products ?? []).map((p) => ({
+        sample_products: (c.sample_products ?? []).map((p: any) => ({
           id: p.id,
-          name: p.title,
-          image_url: p.imageUrl,
-          price: String(p.sellingPrice),
+          name: p.title || p.name,
+          image_url: p.imageUrl || p.image_url || '',
+          price: String(p.sellingPrice || p.price_kes || '0'),
         })),
       })),
-      products: (res?.products ?? []).map((p) => mapMarketplaceProduct(p)),
+      products: res?.products ?? [],
       vehicleFilter: res?.vehicleFilter ?? { makes: [], modelsByMake: {}, years: [] },
     };
   } catch {
@@ -225,7 +233,7 @@ export async function getMarketplaceProducts(
   if (vehicle?.model) query.model = vehicle.model;
   if (vehicle?.year) query.year = Number(vehicle.year);
   const res = await api.apiGetMarketplaceProducts(query);
-  return (res?.data ?? []).map((p) => mapMarketplaceProduct(p));
+  return res?.data ?? [];
 }
 
 export async function getAdminCategoryCards(): Promise<AdminCategoryCard[]> {

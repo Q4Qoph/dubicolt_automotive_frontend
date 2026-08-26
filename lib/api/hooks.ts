@@ -131,17 +131,33 @@ export function useMarketplaceProducts(
   search?: string,
   brand?: string,
   vehicle?: { make?: string; model?: string; year?: string },
+  page = 1,
+  pageSize = 48,
+  sortBy?: string,
 ) {
-  const query: Record<string, string | number> = { page_size: 48 };
+  const query: Record<string, string | number> = { page, pageSize };
   if (category) query.category = category;
   if (search?.trim()) query.search = search.trim();
-  if (brand) query.brand = brand;
+  if (brand) query.supplier = brand;
   if (vehicle?.make) query.make = vehicle.make;
   if (vehicle?.model) query.model = vehicle.model;
   if (vehicle?.year) query.year = vehicle.year;
+  if (sortBy) {
+    if (sortBy === 'price-asc') {
+      query.sortBy = 'price';
+      query.sortDirection = 'asc';
+    } else if (sortBy === 'price-desc') {
+      query.sortBy = 'price';
+      query.sortDirection = 'desc';
+    } else if (sortBy === 'name') {
+      query.sortBy = 'partName';
+      query.sortDirection = 'asc';
+    }
+  }
+
   return useQuery({
-    queryKey: queryKeys.marketplace.products(query),
-    queryFn: () => getMarketplaceProducts(undefined, category, search, vehicle),
+    queryKey: ['marketplace', 'parts', query],
+    queryFn: () => api.apiGetMarketplaceProducts(query),
   });
 }
 

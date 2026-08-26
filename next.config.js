@@ -1,4 +1,7 @@
-const rawTarget = process.env.API_PROXY_TARGET || process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
+const rawTarget =
+  process.env.API_PROXY_TARGET ||
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  'https://dubicolt-v2.ambitiousrock-1ff861ef.eastus.azurecontainerapps.io';
 const apiTarget = rawTarget.replace(/\/api\/?$/, '');
 
 const nextConfig = {

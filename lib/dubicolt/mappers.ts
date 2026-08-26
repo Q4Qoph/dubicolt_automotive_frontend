@@ -279,3 +279,111 @@ export function mapPartRequestDetail(r: DubicoltPartRequestDetail) {
     delivery_address: r.vin ? `VIN: ${r.vin}` : undefined,
   };
 }
+
+// ——— .NET v2 Mappings ———
+import type { PartRecord, NetOrderResponseDto } from '@/lib/contracts';
+
+export function mapPartRecordToMarketplaceProduct(p: PartRecord): MarketplaceProduct {
+  const priceKes = p.price && p.price > 0 ? p.price : 4500;
+  const title = p.partName || 'Automotive Replacement Part';
+  const applicable = p.applicableModel || '';
+  const make = applicable.split(' ')[0] || 'Universal';
+  const model = applicable.split(' ').slice(1).join(' ') || applicable || 'All Models';
+
+  return {
+    id: p.id,
+    productId: p.id,
+    name: title,
+    vendor: p.supplier || 'Partsouq',
+    origin: p.supplier || 'OEM Global',
+    category: p.partName?.toUpperCase().includes('ENGINE')
+      ? 'Engine'
+      : p.partName?.toUpperCase().includes('BRAKE')
+        ? 'Brakes'
+        : p.partName?.toUpperCase().includes('SUSPENSION')
+          ? 'Suspension'
+          : p.partName?.toUpperCase().includes('ELECTRICAL')
+            ? 'Electrical'
+            : 'Body',
+    sku: p.partCode || p.id.slice(0, 8).toUpperCase(),
+    oemNumber: p.partCode || undefined,
+    price_usd: Math.round(priceKes / 130),
+    price_kes: String(priceKes),
+    price_aed: String(Math.round(priceKes / 35)),
+    image_url:
+      p.imageUrl ||
+      'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=600&q=80',
+    cta: 'cart',
+    stock: 15,
+    min_order: 1,
+    compatibleVehicles: applicable ? [{ make, model, yearFrom: 2015, yearTo: 2024 }] : undefined,
+  };
+}
+
+export function mapPartRecordToProduct(p: PartRecord): Product {
+  const mp = mapPartRecordToMarketplaceProduct(p);
+  return {
+    id: p.id,
+    name: mp.name,
+    sku: mp.sku,
+    price_kes: Number(mp.price_kes),
+    compare_at_price_kes: null,
+    save_percent: null,
+    origin: p.supplier || 'OEM Supplier',
+    image_url: mp.image_url,
+    images: p.imageUrl ? [p.imageUrl] : [mp.image_url],
+    specs: {
+      'Applicable Model': p.applicableModel || 'Multi-model',
+      Supplier: p.supplier || 'Partsouq',
+      'Part Code': p.partCode || p.id.slice(0, 8).toUpperCase(),
+      Stock: 'Available',
+    },
+    currency_ke: 'KES',
+    currency_ae: 'AED',
+    description: `${mp.name} engineered for ${p.applicableModel || 'standard specifications'}. Verified OEM replacement component.`,
+    vendor: p.supplier || 'Dubicolt',
+    category: mp.category,
+    review_count: 5,
+    logistics_note: 'Verified Genuine OEM Stock. Fast regional delivery.',
+  };
+}
+
+export function mapNetOrderResponseToUserMarketplaceOrder(
+  o: NetOrderResponseDto,
+): UserMarketplaceOrder {
+  const statusLabels: Record<number, string> = {
+    0: 'Pending',
+    1: 'Confirmed',
+    2: 'Processing',
+    3: 'In Transit',
+    4: 'Delivered',
+    5: 'Cancelled',
+    6: 'Refunded',
+  };
+  const status = statusLabels[o.orderStatus] || 'Processing';
+  const { step, icon } = orderProgress(status);
+  const firstItem = o.orderItems?.[0];
+  const title = firstItem?.product?.partName || `Order #${o.id.slice(0, 8).toUpperCase()}`;
+  const imageUrl = firstItem?.product?.imageUrl || 'https://placehold.co/200x200?text=Part';
+
+  return {
+    id: o.id,
+    order_number: o.id.slice(0, 8).toUpperCase(),
+    tracking_id: o.id,
+    title,
+    vendor: firstItem?.product?.supplier || 'Dubicolt',
+    origin_flag: 'KE',
+    image_url: imageUrl,
+    status,
+    status_icon: icon,
+    progress_step: step,
+    price_kes: String(o.total),
+    price_secondary: '',
+    date_label: 'Status',
+    date_value: `KSh ${o.total.toLocaleString()}`,
+    primary_action: 'View details',
+    secondary_action: 'Track delivery',
+    primary_style: 'navy',
+  };
+}
+

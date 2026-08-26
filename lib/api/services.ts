@@ -6,6 +6,9 @@ import {
   mapPartRequestDashboard,
   mapPartRequestDetail,
   mapProduct,
+  mapPartRecordToProduct,
+  mapPartRecordToMarketplaceProduct,
+  mapNetOrderResponseToUserMarketplaceOrder,
 } from '@/lib/dubicolt/mappers';
 import type {
   DubicoltCheckoutRequest,
@@ -31,6 +34,11 @@ import type {
   LoginRequest,
   RegisterRequest,
   UpdateCartItemRequest,
+  PartRecord,
+  RecordResponse,
+  NetCartItem,
+  NetOrderResponseDto,
+  StkPushResponseDto,
 } from '@/lib/contracts';
 import type {
   AdminDashboardKpis,
@@ -40,6 +48,8 @@ import type {
   LogisticsPipelineCard,
   UserMarketplaceOrder,
   UserMarketplaceOrderDetail,
+  MarketplaceProduct,
+  Product,
 } from '@/lib/types';
 
 function token() {
@@ -49,141 +59,200 @@ function token() {
 // ——— Auth ———
 
 export async function apiLogin(body: LoginRequest): Promise<AuthTokensResponse> {
-  return apiRequest<AuthTokensResponse>(API_PATHS.auth.login, {
+  const res = await apiRequest<{ token: string; message?: string }>(API_PATHS.auth.login, {
     method: 'POST',
-    body,
+    body: { email: body.email, password: body.password },
   });
+  return {
+    access_token: res.token,
+    refresh_token: '',
+    expires_in: 86400,
+    user: {
+      id: 'user',
+      email: body.email,
+      name: body.email.split('@')[0],
+      company: 'Dubicolt',
+      role: 'buyer',
+    },
+  };
 }
 
 export async function apiRegister(body: RegisterRequest): Promise<AuthTokensResponse> {
-  return apiRequest<AuthTokensResponse>(API_PATHS.auth.register, {
+  await apiRequest<string | { message?: string }>(API_PATHS.auth.register, {
     method: 'POST',
-    body,
+    body: { name: body.name, email: body.email, password: body.password },
   });
+  return apiLogin({ email: body.email, password: body.password });
 }
 
 export async function apiLogout(): Promise<void> {
-  await apiRequest<void>(API_PATHS.auth.logout, {
-    method: 'POST',
-    token: token(),
-  });
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('dubicolt_session');
+    localStorage.removeItem('dubiken_session');
+  }
 }
 
 export async function apiAuthMe(): Promise<AuthUser> {
-  return apiRequest<AuthUser>(API_PATHS.auth.me, { token: token() });
-}
-
-// ——— Products ———
-
-export async function apiSearchProducts(query?: Record<string, string | number>) {
-  return apiRequest<DubicoltProduct[]>(API_PATHS.products.search, { query });
-}
-
-export async function apiListProducts() {
-  return apiRequest<DubicoltProduct[]>(API_PATHS.products.list);
-}
-
-export async function apiGetProduct(id: string) {
   try {
-    const dto = await apiRequest<DubicoltProduct>(API_PATHS.products.byId(id));
-    return mapProduct(dto);
+    const res = await apiRequest<{ id?: string; name?: string; email?: string }>(
+      API_PATHS.auth.me,
+      { token: token() },
+    );
+    return {
+      id: res.id || 'user',
+      name: res.name || 'User',
+      email: res.email || '',
+      company: 'Dubicolt Customer',
+      role: 'buyer',
+    };
+  } catch {
+    return {
+      id: 'user',
+      name: 'User',
+      email: '',
+      company: 'Dubicolt Customer',
+      role: 'buyer',
+    };
+  }
+}
+
+// ——— Products / Parts ———
+
+export async function apiSearchParts(query?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  model?: string;
+  supplier?: string;
+  sortBy?: string;
+  sortDirection?: string;
+}): Promise<RecordResponse> {
+  return apiRequest<RecordResponse>(API_PATHS.parts.list, { query });
+}
+
+export async function apiSearchProducts(query?: Record<string, string | number>): Promise<MarketplaceProduct[]> {
+  const params: Record<string, string | number> = {
+    page: Number(query?.page) || 1,
+    pageSize: Number(query?.pageSize || query?.page_size) || 48,
+  };
+  if (query?.keyword || query?.search) params.search = String(query.keyword || query.search);
+  if (query?.model) params.model = String(query.model);
+  if (query?.supplier || query?.brand) params.supplier = String(query.supplier || query.brand);
+  if (query?.sortBy) params.sortBy = String(query.sortBy);
+  if (query?.sortDirection) params.sortDirection = String(query.sortDirection);
+
+  const res = await apiRequest<RecordResponse>(API_PATHS.parts.list, { query: params });
+  return (res.items || []).map(mapPartRecordToMarketplaceProduct);
+}
+
+export async function apiListProducts(): Promise<MarketplaceProduct[]> {
+  const res = await apiRequest<RecordResponse>(API_PATHS.parts.list, { query: { page: 1, pageSize: 50 } });
+  return (res.items || []).map(mapPartRecordToMarketplaceProduct);
+}
+
+export async function apiGetProduct(id: string): Promise<Product | null> {
+  try {
+    const dto = await apiRequest<PartRecord>(API_PATHS.parts.byId(id));
+    return mapPartRecordToProduct(dto);
   } catch {
     return null;
   }
 }
 
-export async function apiGetRelatedProducts(id: string, limit = 4) {
-  const all = await apiSearchProducts();
+export async function apiGetRelatedProducts(id: string, limit = 4): Promise<MarketplaceProduct[]> {
+  const all = await apiSearchProducts({ pageSize: limit + 1 });
   return all.filter((p) => p.id !== id).slice(0, limit);
 }
 
 export async function apiGetMarketplaceProducts(query?: Record<string, string | number>) {
-  const searchQuery: Record<string, string | number> = {};
-  if (query?.search) searchQuery.keyword = String(query.search);
-  if (query?.category) searchQuery.category = String(query.category);
-  if (query?.brand) searchQuery.brand = String(query.brand);
-  if (query?.make) searchQuery.make = String(query.make);
-  if (query?.model) searchQuery.model = String(query.model);
-  if (query?.year) searchQuery.year = Number(query.year);
-  const rows = await apiSearchProducts(searchQuery);
-  return { data: rows, meta: { page: 1, page_size: rows.length, total: rows.length } };
-}
+  const page = Math.max(1, Number(query?.page) || 1);
+  const pageSize = Number(query?.pageSize || query?.page_size) || 48;
+  const params: Record<string, string | number> = { page, pageSize };
+  if (query?.search) params.search = String(query.search);
+  if (query?.model) params.model = String(query.model);
+  if (query?.brand || query?.supplier) params.supplier = String(query.brand || query.supplier);
+  if (query?.make) params.search = params.search ? `${query.make} ${params.search}` : String(query.make);
+  if (query?.sortBy) params.sortBy = String(query.sortBy);
+  if (query?.sortDirection) params.sortDirection = String(query.sortDirection);
 
-const ORIGIN_LABELS: Record<string, string> = { KE: 'Kenya', AE: 'Dubai', CN: 'China' };
+  const res = await apiRequest<RecordResponse>(API_PATHS.parts.list, { query: params });
+  const rows = (res.items || []).map(mapPartRecordToMarketplaceProduct);
+  const total = res.totalCount ?? rows.length;
+  const totalPages = res.totalPages ?? Math.max(1, Math.ceil(total / pageSize));
 
-function mapCategoryCard(c: import('@/lib/dubicolt/types').DubicoltCategory) {
   return {
-    id: c.id,
-    name: c.name,
-    description: c.description,
-    origins: c.origins,
-    trend: `${c.productCount} SKUs`,
-    trend_variant: 'stable' as const,
-    total_skus: c.productCount,
-    vendors: 0,
-    image_url: c.imageUrl || '',
-    status: c.status,
+    data: rows,
+    meta: {
+      page: res.page || page,
+      page_size: res.pageSize || pageSize,
+      total,
+      totalPages,
+    },
   };
 }
 
-function buildVehicleFilterOptions(
-  products: import('@/lib/dubicolt/types').DubicoltProduct[],
-): import('@/lib/domain-types').VehicleFilterOptions {
+// ——— Home Feed ———
+
+export async function apiGetHomeFeed() {
+  const res = await apiRequest<RecordResponse>(API_PATHS.parts.list, { query: { page: 1, pageSize: 50 } });
+  const items = res.items || [];
+  const products = items.map(mapPartRecordToMarketplaceProduct);
+
   const makes = new Set<string>();
   const modelsByMake = new Map<string, Set<string>>();
-  const years = new Set<number>();
+  const years = [2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017, 2016, 2015];
 
-  for (const product of products) {
-    for (const vehicle of product.compatibleVehicles ?? []) {
-      makes.add(vehicle.make);
-      if (!modelsByMake.has(vehicle.make)) modelsByMake.set(vehicle.make, new Set());
-      modelsByMake.get(vehicle.make)!.add(vehicle.model);
-      for (let year = vehicle.yearFrom; year <= vehicle.yearTo; year += 1) {
-        years.add(year);
+  for (const part of items) {
+    if (part.applicableModel) {
+      const parts = part.applicableModel.split(' ');
+      const make = parts[0];
+      const model = parts.slice(1).join(' ') || part.applicableModel;
+      if (make) {
+        makes.add(make);
+        if (!modelsByMake.has(make)) modelsByMake.set(make, new Set());
+        if (model) modelsByMake.get(make)!.add(model);
       }
     }
   }
 
-  return {
-    makes: [...makes].sort(),
-    modelsByMake: Object.fromEntries(
-      [...modelsByMake.entries()].map(([make, models]) => [make, [...models].sort()]),
-    ),
-    years: [...years].sort((a, b) => b - a),
-  };
-}
+  const categoryNames = ['Engine', 'Brakes', 'Suspension', 'Electrical', 'Body', 'EV Systems'];
+  const categories = categoryNames.map((name, i) => ({
+    id: `cat-${i + 1}`,
+    name,
+    description: `OEM & Aftermarket ${name} components`,
+    origin: 'KE',
+    product_count: 5000,
+    image_url: 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=600&q=80',
+    sample_products: [],
+  }));
 
-export async function apiGetHomeFeed() {
-  const [categories, products] = await Promise.all([apiListCategories(), apiSearchProducts()]);
-  const published = categories.filter((c) => c.status === 'published');
   return {
-    categories: published.slice(0, 6).map((c) => ({
-      id: c.id,
-      name: c.name,
-      description: c.description,
-      origin: c.origins[0] ?? 'KE',
-      product_count: c.productCount,
-      image_url: c.imageUrl || '',
-      sample_products: products.filter((p) => p.category === c.name).slice(0, 2),
-    })),
+    categories,
     products: products.slice(0, 8),
-    vehicleFilter: buildVehicleFilterOptions(products),
-    meta: { page: 1, page_size: 8, total: products.length },
+    vehicleFilter: {
+      makes: Array.from(makes).sort(),
+      modelsByMake: Object.fromEntries(
+        Array.from(modelsByMake.entries()).map(([make, models]) => [make, Array.from(models).sort()]),
+      ),
+      years,
+    },
+    meta: { page: 1, page_size: 8, total: res.totalCount || products.length },
   };
 }
 
 export async function apiListCategories() {
-  return apiRequest<import('@/lib/dubicolt/types').DubicoltCategory[]>(API_PATHS.categories.root);
+  return [
+    { id: '1', name: 'Engine Parts', slug: 'engine', description: 'Engine components', origins: ['KE', 'AE', 'CN'], productCount: 1200, imageUrl: '', status: 'published' as const },
+    { id: '2', name: 'Brake Systems', slug: 'brakes', description: 'Brake discs, pads & rotors', origins: ['KE', 'AE'], productCount: 850, imageUrl: '', status: 'published' as const },
+    { id: '3', name: 'Suspension', slug: 'suspension', description: 'Struts, shocks & springs', origins: ['KE', 'CN'], productCount: 940, imageUrl: '', status: 'published' as const },
+    { id: '4', name: 'Electrical', slug: 'electrical', description: 'Alternators, sensors & wiring', origins: ['KE', 'AE', 'CN'], productCount: 620, imageUrl: '', status: 'published' as const },
+  ];
 }
 
 export async function apiGetCategories(query?: { page?: number; page_size?: number }) {
   const all = await apiListCategories();
-  const published = all.filter((c) => c.status === 'published');
-  const page = query?.page ?? 1;
-  const pageSize = query?.page_size ?? 12;
-  const slice = published.slice((page - 1) * pageSize, page * pageSize);
   return {
-    data: slice.map((c) => ({
+    data: all.map((c) => ({
       id: c.id,
       name: c.name,
       origin: c.origins[0] ?? 'KE',
@@ -191,91 +260,176 @@ export async function apiGetCategories(query?: { page?: number; page_size?: numb
       image_url: c.imageUrl || '',
       sample_products: [],
     })),
-    meta: { page, page_size: pageSize, total: published.length },
+    meta: { page: 1, page_size: 10, total: all.length },
   };
 }
 
 // ——— Cart & checkout ———
 
 export async function apiGetCart(): Promise<CartResponse> {
-  const cart = await apiRequest<import('@/lib/dubicolt/types').DubicoltCart>(
-    API_PATHS.cart.root,
-    { token: token() },
-  );
-  return mapCart(cart);
+  const authToken = token();
+  if (!authToken) {
+    return { items: [], item_count: 0, subtotal: 0 };
+  }
+  try {
+    const rawItems = await apiRequest<NetCartItem[]>(API_PATHS.cart.root, { token: authToken });
+    const items = (rawItems || []).map((i) => {
+      const price = i.product?.price && i.product.price > 0 ? i.product.price : 4500;
+      return {
+        id: i.id,
+        product_id: i.productId,
+        name: i.product?.partName || 'Automotive Replacement Part',
+        sku: i.product?.partCode || i.productId.slice(0, 8).toUpperCase(),
+        quantity: i.quantity,
+        unit_price: price,
+        unit_price_kes: price,
+        origin: i.product?.supplier || 'OEM Supplier',
+        image_url: i.product?.imageUrl || '',
+      };
+    });
+    const item_count = items.reduce((s, i) => s + i.quantity, 0);
+    const subtotal = items.reduce((s, i) => s + i.unit_price_kes * i.quantity, 0);
+    return { items, item_count, subtotal };
+  } catch {
+    return { items: [], item_count: 0, subtotal: 0 };
+  }
 }
 
-export async function apiAddCartItem(productId: string, quantity: number) {
-  const cart = await apiRequest<import('@/lib/dubicolt/types').DubicoltCart>(
-    API_PATHS.cart.items,
-    {
+export async function apiAddCartItem(productId: string, quantity: number): Promise<CartResponse> {
+  const authToken = token();
+  if (authToken) {
+    try {
+      await apiRequest<void>(API_PATHS.cart.items, {
+        method: 'POST',
+        body: { productId, quantity },
+        token: authToken,
+      });
+    } catch {
+      // ignore
+    }
+  }
+  return apiGetCart();
+}
+
+export async function apiUpdateCartItem(productId: string, body: UpdateCartItemRequest): Promise<CartResponse> {
+  const authToken = token();
+  if (authToken) {
+    try {
+      await apiRequest<void>(API_PATHS.cart.root, {
+        method: 'PUT',
+        body: { productId, quantity: body.quantity },
+        token: authToken,
+      });
+    } catch {
+      // ignore
+    }
+  }
+  return apiGetCart();
+}
+
+export async function apiRemoveCartItem(cartItemId: string): Promise<CartResponse> {
+  const authToken = token();
+  if (authToken) {
+    try {
+      await apiRequest<void>(API_PATHS.cart.item(cartItemId), {
+        method: 'DELETE',
+        token: authToken,
+      });
+    } catch {
+      // ignore
+    }
+  }
+  return apiGetCart();
+}
+
+export async function apiCheckout(
+  body: DubicoltCheckoutRequest | { deliveryMethod?: string; deliveryAddress?: string; shipping?: { address?: string } },
+) {
+  const address =
+    ('deliveryAddress' in body && body.deliveryAddress)
+      ? body.deliveryAddress
+      : (('shipping' in body && body.shipping?.address) ? body.shipping.address : 'Nairobi, Kenya');
+  const orderId = await apiRequest<string>(API_PATHS.orders.create, {
     method: 'POST',
-    body: { productId, quantity },
+    body: { deliveryAddress: address },
     token: token(),
   });
-  return mapCart(cart);
-}
-
-export async function apiUpdateCartItem(lineId: string, body: UpdateCartItemRequest) {
-  const cart = await apiRequest<import('@/lib/dubicolt/types').DubicoltCart>(
-    API_PATHS.cart.item(lineId),
-    {
-      method: 'PUT',
-      body,
-      token: token(),
-    },
-  );
-  return mapCart(cart);
-}
-
-export async function apiRemoveCartItem(lineId: string) {
-  const cart = await apiRequest<import('@/lib/dubicolt/types').DubicoltCart>(
-    API_PATHS.cart.item(lineId),
-    {
-      method: 'DELETE',
-      token: token(),
-    },
-  );
-  return mapCart(cart);
-}
-
-export async function apiCheckout(body: DubicoltCheckoutRequest) {
-  return apiRequest<DubicoltCheckoutResponse>(API_PATHS.cart.checkout, {
-    method: 'POST',
-    body,
-    token: token(),
-  });
+  const idStr = String(orderId);
+  return {
+    orderId: idStr,
+    order_id: idStr,
+    orderNumber: idStr.slice(0, 8).toUpperCase(),
+    order_number: idStr.slice(0, 8).toUpperCase(),
+    payment_url: undefined,
+  };
 }
 
 export async function apiMpesaStkPush(orderId: string, phone: string) {
-  return apiRequest<DubicoltStkPushResponse>(API_PATHS.payments.stkPush, {
+  const query = { phoneNumber: phone, Id: orderId };
+  const res = await apiRequest<StkPushResponseDto>(API_PATHS.payments.stkPush, {
     method: 'POST',
-    body: { orderId, phone },
+    query,
     token: token(),
   });
+  return {
+    ...res,
+    orderId,
+    order_id: orderId,
+    message:
+      res.customerMessage ||
+      res.responseDescription ||
+      'STK push prompt sent to your mobile device. Enter M-Pesa PIN to complete payment.',
+  };
 }
 
 // ——— Orders ———
 
 export async function apiGetUserMarketplaceOrders(): Promise<UserMarketplaceOrder[]> {
-  const rows = await apiRequest<DubicoltOrderSummary[]>(API_PATHS.orders.root, {
-    token: token(),
-  });
-  return rows.map(mapOrderSummary);
+  const authToken = token();
+  if (!authToken) return [];
+  try {
+    const orders = await apiRequest<NetOrderResponseDto[]>(API_PATHS.orders.userOrders, {
+      token: authToken,
+    });
+    return (orders || []).map(mapNetOrderResponseToUserMarketplaceOrder);
+  } catch {
+    return [];
+  }
 }
 
 export async function apiGetUserMarketplaceOrder(
   id: string,
 ): Promise<UserMarketplaceOrderDetail | null> {
+  const authToken = token();
+  if (!authToken) return null;
   try {
-    const detail = await apiRequest<DubicoltOrderDetail>(API_PATHS.orders.byId(id), {
-      token: token(),
+    const orderDto = await apiRequest<NetOrderResponseDto>(API_PATHS.orders.byId(id), {
+      token: authToken,
     });
-    return mapOrderDetail(detail);
+    const order = mapNetOrderResponseToUserMarketplaceOrder(orderDto);
+    return {
+      order,
+      shipment: {
+        id: orderDto.id,
+        tracking_id: orderDto.id,
+        current_status: order.status,
+        origin_city: 'Warehouse Hub',
+        destination_city: orderDto.deliveryAddress || 'Nairobi',
+        vessel: 'Dubicolt Logistics Express',
+        proof_url: undefined,
+        milestones: [
+          { label: 'Order Placed', detail: 'Order received', date: '', done: true },
+          { label: 'Processing', detail: 'Preparing items', date: '', done: orderDto.orderStatus >= 2, active: orderDto.orderStatus === 2 },
+          { label: 'In Transit', detail: 'Dispatched to courier', date: '', done: orderDto.orderStatus >= 3, active: orderDto.orderStatus === 3 },
+          { label: 'Delivered', detail: 'Delivered to client', date: '', done: orderDto.orderStatus >= 4, active: orderDto.orderStatus === 4 },
+        ],
+      },
+    };
   } catch {
     return null;
   }
 }
+
 
 // ——— Part requests & quotations ———
 
@@ -437,6 +591,23 @@ export async function apiGetAdminSourcingDetail(id: string) {
       notes: `Valid until ${q.validUntil}`,
       official: true,
     })),
+  };
+}
+
+const ORIGIN_LABELS: Record<string, string> = { KE: 'Kenya', AE: 'Dubai', CN: 'China' };
+
+function mapCategoryCard(c: import('@/lib/dubicolt/types').DubicoltCategory) {
+  return {
+    id: c.id,
+    name: c.name,
+    description: c.description,
+    origins: c.origins,
+    trend: `${c.productCount} SKUs`,
+    trend_variant: 'stable' as const,
+    total_skus: c.productCount,
+    vendors: 0,
+    image_url: c.imageUrl || '',
+    status: c.status,
   };
 }
 

@@ -2,38 +2,47 @@
 
 export const API_PATHS = {
   auth: {
-    login: '/auth/login',
-    register: '/auth/register',
-    logout: '/auth/logout',
-    me: '/auth/profile',
+    login: '/User/login',
+    register: '/User/register',
+    logout: '/User/logout',
+    me: '/user',
+  },
+  parts: {
+    list: '/parts/parts',
+    byId: (id: string) => `/parts/PartsSeed/${id}`,
   },
   products: {
-    search: '/products/search',
-    list: '/products',
-    byId: (id: string) => `/products/${id}`,
+    search: '/parts/parts',
+    list: '/parts/parts',
+    byId: (id: string) => `/parts/PartsSeed/${id}`,
   },
   vehicles: {
     root: '/vehicles',
     byId: (id: string) => `/vehicles/${id}`,
   },
   cart: {
-    root: '/cart',
-    item: (lineId: string) => `/cart/items/${lineId}`,
-    items: '/cart/items',
-    checkout: '/cart/checkout',
+    root: '/Cart',
+    item: (id: string) => `/Cart/${id}`,
+    items: '/Cart',
+    checkout: '/Order/create',
   },
   orders: {
-    root: '/orders',
-    byId: (id: string) => `/orders/${id}`,
-    invoice: (id: string) => `/orders/${id}/invoice`,
-    status: (id: string) => `/orders/${id}/status`,
+    root: '/Order',
+    create: '/Order/create',
+    userOrders: '/Order/user',
+    byId: (id: string) => `/Order/${id}`,
+    invoice: (id: string) => `/Order/${id}/invoice`,
+    status: (id: string) => `/Order/${id}/status`,
   },
   categories: {
     root: '/categories',
     byId: (id: string) => `/categories/${id}`,
   },
   payments: {
-    stkPush: '/payments/mpesa/stk-push',
+    root: '/Payment',
+    stkPush: '/Payment/initiateStkPush',
+    validate: (orderId: string) => `/Payment/validate/${orderId}`,
+    byId: (checkoutId: string) => `/Payment/${checkoutId}`,
   },
   partRequests: {
     root: '/part-requests',

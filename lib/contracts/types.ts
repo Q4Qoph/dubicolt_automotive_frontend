@@ -429,3 +429,85 @@ export interface AdminAnalyticsDto {
   weekly_volume: { week: string; kenya: number; dubai: number; china: number }[];
   top_categories: { name: string; value_usd: number; pct: number }[];
 }
+
+// ——— C# .NET v2 DTOs ———
+
+export interface PartRecord {
+  id: string;
+  sourceFile?: string | null;
+  supplier?: string | null;
+  rowNo?: number | null;
+  partCode?: string | null;
+  partName?: string | null;
+  applicableModel?: string | null;
+  price?: number | null;
+  imageUrl?: string | null;
+  createdAtUtc: string;
+}
+
+export interface RecordResponse {
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+  items: PartRecord[];
+}
+
+export interface NetCartItem {
+  id: string;
+  userId?: string;
+  productId: string;
+  quantity: number;
+  product?: PartRecord;
+}
+
+export interface NetCartRequest {
+  productId: string;
+  quantity: number;
+}
+
+export interface NetOrderItemResponseDto {
+  id: string;
+  productId: string;
+  quantity: number;
+  price: number;
+  product?: PartRecord;
+}
+
+export interface NetOrderResponseDto {
+  id: string;
+  userId: string;
+  deliveryAddress?: string | null;
+  orderStatus: number; // 0=Pending, 1=Confirmed, 2=InTransit, 3=Delivered, etc.
+  total: number;
+  orderItems?: NetOrderItemResponseDto[] | null;
+}
+
+export interface NetCreateOrderRequest {
+  deliveryAddress: string;
+}
+
+export interface StkPushResponseDto {
+  merchantRequestID?: string | null;
+  checkoutRequestID?: string | null;
+  responseCode?: string | null;
+  responseDescription?: string | null;
+  customerMessage?: string | null;
+  isSuccessful: boolean;
+}
+
+export interface NetPayment {
+  id: string;
+  orderId: string;
+  amount: number;
+  status: number;
+  checkoutRequestId?: string | null;
+  mpesaReceiptNumber?: string | null;
+  merchantRequestId?: string | null;
+}
+
+export interface NetLoginResponse {
+  token: string;
+  message?: string;
+}
+
